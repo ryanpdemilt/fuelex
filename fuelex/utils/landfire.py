@@ -31,11 +31,11 @@ zone_to_superzone_map = dict([(v_prime,k) for (k,v) in SUPERZONES.items() for v_
 def map_superzone(zone):
     return zone_to_superzone_map[zone]
 
-def sample_from_landfire_geometry(expname,geo_file,group_names,n_samples_per_group,img_size,out_file,seed):
+def sample_from_landfire_geometry(expname,geo_file,group_names,n_samples_per_group,img_size,out_file,splits=None,split_sizes=None,seed=2000):
     landfire_gsd = 30
     geodf = gpd.read_file(geo_file)
     geodf['superzone'] = geodf['ZONE_NUM'].map(lambda x: zone_to_superzone_map[x])
-    sample_output_file = sample_images_from_geo_by_key(expname,geodf,group_names,img_size,landfire_gsd,n_samples_per_group,out_file,seed)
+    sample_output_file = sample_images_from_geo_by_key(expname,geodf,group_names,img_size,landfire_gsd,n_samples_per_group,out_file,splits,split_sizes,seed)
 
 
 def sample_landfire_ims(work_dir,src_path,dataset,year,geometry,dst_scale=30,n_jobs=1):

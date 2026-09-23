@@ -10,4 +10,6 @@ uv run fuelex sample \
      --outfile $OUT_FILE \
      --samples_per_group 3000 \
      --dataset landfire \
+     --splits test val train \
+     --split-sizes 0.2 0.1 0.7 \
      --expname fuelex

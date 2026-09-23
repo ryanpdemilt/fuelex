@@ -36,6 +36,8 @@ def _cmd_sample(args: argparse.Namespace)->None:
             args.samples_per_group,
             args.img_size,
             args.outfile,
+            args.splits,
+            args.split_sizes,
             args.seed
         )
     else:
@@ -112,6 +114,7 @@ def _build_parser(mode: str):
     sample.add_argument('--dataset',type=str,default='landfire')
     sample.add_argument('--expname',type=str,default='fuelex')
     sample.add_argument('--splits',type=str,nargs='+')
+    sample.add_argument('--split-sizes',type=float,nargs='+')
 
     _add_override_arg(sample)
     sample.set_defaults(func=_cmd_sample)

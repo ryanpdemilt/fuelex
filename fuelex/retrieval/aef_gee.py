@@ -35,7 +35,7 @@ def check_and_make_dir(dir):
         os.makedirs(dir)
 
 @retry(tries=1,delay=1,backoff=2)
-def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_blocks=None):
+def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_blocks=None,padding=10):
     aef = ee.ImageCollection('GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL').filter(ee.Filter.calendarRange(year,year,'year')).mosaic()
 
     scene_id = geometry['sample_id']
@@ -43,13 +43,17 @@ def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_bl
     left, bottom, right, top = geometry.geometry.bounds
     centroid = geometry.geometry.centroid
     x,y = centroid.x, centroid.y
-    t = Transformer.from_crs(crs_from=dst_crs,crs_to=AEF_CRS,always_xy=True)
+    # t = Transformer.from_crs(crs_from=dst_crs,crs_to=AEF_CRS,always_xy=True)
 
-    aef_left, aef_bottom = t.transform(left,bottom)
-    aef_right, aef_top = t.transform(right,top)
-    region = ee.Geometry.BBox(aef_left,aef_bottom,aef_right,aef_top)
+    # aef_left, aef_bottom = t.transform(left,bottom)
+    # aef_right, aef_top = t.transform(right,top)
+    # aef_x, aef_y = t.transform(x,y)
+    
+    
+    # region = ee.Geometry.BBox(aef_left,aef_bottom,aef_right,aef_top)
 
     pixels = int((right - left) / dst_scale)
+    aef_bbox = ee.Geometry.Point((x,y),proj=ee.Projection(dst_crs)).buffer((pixels+padding)*30,proj=ee.Projection(dst_crs))
 
     transform = A.translation(left - dst_scale / 2,top - dst_scale / 2) * A.scale(dst_scale,-dst_scale)
 
@@ -60,29 +64,39 @@ def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_bl
         # for j in range(spatial_blocks):
         aef_url = aef.getDownloadURL({
             'bands':list(band_group),
-            'region':region,
+            'region':aef_bbox,
             'crs':dst_crs,
             'scale':dst_scale,
             'crsTransform':transform,
             'dimension':[pixels,pixels],
             'format':'NPY'
         })
-        print(f'Download Link Acquired for Scene {scene_id} | Band Group {i}')
+        # print(f'Download Link Acquired for Scene {scene_id} | Band Group {i}')
 
-        print(f'Beginning Download for Scene {scene_id} | Band Group {i}')
+        # print(f'Beginning Download for Scene {scene_id} | Band Group {i}')
         r = requests.get(aef_url,stream=True)
         if r.status_code != 200:
             raise r.raise_for_status()
-        print(f'Beginning Download for Scene {scene_id} | Band Group {i}')
+        # print(f'Ending Download for Scene {scene_id} | Band Group {i}')
         
         
         partial_result = np.load(io.BytesIO(r.content))
-        print(f'Retrieved Size {partial_result.shape}')
         partial_result = np.stack([partial_result[band] for band in band_group])
         partial_results.append(partial_result)
     aef_arr = np.concatenate(partial_results,axis=0)
-        
+    
+    
+    
     b, h, w = aef_arr.shape
+    if not ((h==pixels) and (w==pixels)):
+        center_h = h // 2
+        center_w = w // 2
+
+        radius = pixels // 2
+
+        aef_arr = aef_arr[:,center_h-radius:center_h+radius,center_w-radius:center_w+radius]
+    # print(f'Final Shape: {aef_arr.shape}')
+
     aef_kwargs = {
         'crs':dst_crs,
         'transform':transform,
@@ -91,7 +105,7 @@ def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_bl
         'height':h,
         'dtype':np.float32
     }
-    print(f'Writing Tif for Scene {scene_id}')
+    # print(f'Writing Tif for Scene {scene_id}')
     with rio.open(aef_fname,'w',**aef_kwargs) as rst:
         for i in range(b):
             band_id = i+1

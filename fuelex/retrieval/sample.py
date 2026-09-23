@@ -11,7 +11,7 @@ from rich import print
 
 from fuelex.utils import partition, union
 
-def sample_images_from_geo_by_key(dataset_name,geodf,key_name,spatial_size_pixels,spatial_gsd,n_sample_ims,out_file,seed=2000):
+def sample_images_from_geo_by_key(dataset_name,geodf,key_name,spatial_size_pixels,spatial_gsd,n_sample_ims,out_file,splits=None,split_sizes=None,seed=2000):
     spatial_size = spatial_size_pixels*spatial_gsd
     # try:
     #     if isinstance(geo_file,str) and geo_file.split('.') == 'parquet':
@@ -32,19 +32,32 @@ def sample_images_from_geo_by_key(dataset_name,geodf,key_name,spatial_size_pixel
     for group in groups:
         geometry_group = geodf[geodf[key_name] == group]
 
-        grid = partition_geometry_group(geometry_group=geometry_group,n_sample_ims=n_sample_ims,spatial_size=spatial_size,seed=seed)
+        grid = partition_geometry_group(
+            geometry_group=geometry_group,
+            n_sample_ims=n_sample_ims,
+            spatial_size=spatial_size,
+            seed=seed
+        )
         grid = grid.set_crs(geodf.crs)
         grid['group'] = group
         grid['sample_id'] = grid.index
 
         sample_groups.append(grid)
 
-    final_sample = pd.concat(sample_groups)
+    final_sample = pd.concat(sample_groups,ignore_index=True)
     final_sample = gpd.GeoDataFrame(final_sample,geometry=final_sample.geometry,crs=sample_groups[0].crs)
 
-    out_filename = Path(out_file) / f'{dataset_name}_{key_name}_sampling_{spatial_size_pixels}px_{n_sample_ims}im.geojson'
-    final_sample.to_file(out_filename,driver='GeoJSON')
+    if not splits:
+        out_filename = Path(out_file) / f'{dataset_name}_{key_name}_sampling_{spatial_size_pixels}px_{n_sample_ims}im.geojson'
+        final_sample.to_file(out_filename,driver='GeoJSON')
+    else:
+        assert (sum(split_sizes) == 1) and (len(splits) == len(split_sizes))   
+        for split_prefix, split_size in zip(splits,split_sizes):
+            split = final_sample.groupby('group').sample(n=min(int(split_size*n_sample_ims),len(final_sample)),random_state=seed)
+            final_sample = final_sample.drop(split.index)   
 
+            out_filename = Path(out_file) / f'{dataset_name}_{split_prefix}_{key_name}_sampling_{spatial_size_pixels}px_{n_sample_ims}im.geojson'
+            split.to_file(out_filename,driver='GeoJSON')
     return out_filename
 
 
