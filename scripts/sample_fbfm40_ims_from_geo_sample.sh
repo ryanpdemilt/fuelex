@@ -1,5 +1,5 @@
 export WORK_DIR="/home/rpdemilt/SIG/fuels/fuelex/data/fuelex_dataset/"
-export GEO_FILE="/home/rpdemilt/SIG/fuels/fuelex/data/fuelex_dataset/fuelex_superzone_sampling_256px_100im.geojson"
+export GEO_FILE="/home/rpdemilt/SIG/fuels/fuelex/data/fuelex_dataset/fuelex_superzone_sampling_256px_3000im.geojson"
 export LANDFIRE_SRC="/home/rpdemilt/SIG/fuels/fuelex/data/landfire"
 
 uv run fuelex retrieve \

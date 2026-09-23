@@ -65,11 +65,14 @@ def _cmd_retrieve(args: argparse.Namespace)->None:
                 aef_manager.get_aef_samples(group_geo,n_jobs=args.n_jobs,cleanup=args.clean)
             elif args.source == 'ee':
                 get_aef_gee(
-                    work_dir,
+                    work_dir=work_dir,
+                    grid=group_geo,
+                    project=args.ee_project,
                     dst_crs=args.dst_crs,
                     dst_scale=args.dst_scale,
-                    project=args.project,
-                    year=args.year
+                    year=args.year,
+                    band_groups=args.band_groups,
+                    n_jobs=args.n_jobs
                 )
         elif args.dataset == 'fbfm40':
             sample_landfire_ims(
@@ -118,14 +121,16 @@ def _build_parser(mode: str):
     retrieve.add_argument('--dataset',type=str,default='FBFM40')
     retrieve.add_argument('--geometry',type=str)
     retrieve.add_argument('--groups',type=str,nargs='+')
-    retrieve.add_argument('--cache-dir',type=str)
-    retrieve.add_argument('--work-dir',type=str)
+    retrieve.add_argument('--cache-dir',type=str,default=None)
+    retrieve.add_argument('--work-dir',type=str,default=None)
     retrieve.add_argument('--dst-scale',type=int,default=30)
     retrieve.add_argument('--dst-crs',type=str,default='EPSG:5070')
     retrieve.add_argument('--year',type=int,default=2025)
     retrieve.add_argument('--cache-size',type=int,default=10,help='Number of concurrent tiles to store and run image cutting jobs on.')
     retrieve.add_argument('--source',type=str,default='gee')
     retrieve.add_argument('--ee-project',type=str,default=None)
+    retrieve.add_argument('--band-groups',type=int,default=8)
+    retrieve.add_argument('--spatial-blocks',type=int,default=1)
     retrieve.add_argument('--n-jobs',type=int,default=1)
     retrieve.add_argument('--clean',action='store_true')
     
