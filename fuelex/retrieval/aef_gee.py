@@ -34,7 +34,7 @@ def check_and_make_dir(dir):
     if not os.path.isdir(dir):
         os.makedirs(dir)
 
-@retry(tries=1,delay=1,backoff=2)
+@retry(tries=5,delay=1,backoff=2)
 def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_blocks=None,padding=10):
     aef = ee.ImageCollection('GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL').filter(ee.Filter.calendarRange(year,year,'year')).mosaic()
 
@@ -105,7 +105,7 @@ def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_bl
         'height':h,
         'dtype':np.float32
     }
-    # print(f'Writing Tif for Scene {scene_id}')
+    print(f'Writing Tif for Scene {scene_id}')
     with rio.open(aef_fname,'w',**aef_kwargs) as rst:
         for i in range(b):
             band_id = i+1

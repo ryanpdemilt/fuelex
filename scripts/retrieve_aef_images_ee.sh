@@ -7,7 +7,7 @@ uv run fuelex retrieve \
     --geometry $GEO_FILE \
     --year 2024 \
     --groups "Pacific South" "Great Basin" \
-    --band-groups 16 \
+    --band-groups 4 \
     --work-dir $WORK_DIR \
     --dst-scale 30 \
     --dst-crs EPSG:5070 \
