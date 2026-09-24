@@ -8,10 +8,15 @@ from yaml import safe_load
 
 import geopandas as gpd
 
+import hydra
+from hydra.conf import HydraConf
+from omegaconf import DictConfig, OmegaConf
+
 from rich import print
 
 from .retrieval import AEFManager,get_aef_gee
 from .utils import sample_from_landfire_geometry,sample_landfire_ims
+from .engine import run_train,run_inference
 
 def _add_override_arg(parser: argparse.ArgumentParser):
     parser.add_argument(
@@ -22,10 +27,10 @@ def _add_override_arg(parser: argparse.ArgumentParser):
     )
 
 def _cmd_train(args: argparse.Namespace) -> None:
-    pass
+    run_train(args)
 
 def _cmd_inference(args: argparse.Namespace) -> None:
-    pass
+    run_inference(args)
 
 def _cmd_sample(args: argparse.Namespace)->None:
     if args.dataset == 'landfire':
@@ -95,6 +100,16 @@ def _build_parser(mode: str):
 
     train = sub.add_parser('train')
 
+    train.add_argument('--config-path',type=str)
+    train.add_argument('--config-name',type=str)
+    # train.add_argument('--criterion',type=str)
+    # train.add_argument('--datsaet',type=str)
+    # train.add_argument('--lr_scheduler',type=str)
+    # train.add_argument('--model',type=str)
+    # train.add_argument('--optimizer',type=str)
+    # train.add_argument('--preprocessing',type=str)
+    # train.add_argument('--task',type=str)
+    
     _add_override_arg(train)
     train.set_defaults(func=_cmd_train)
 
@@ -161,6 +176,7 @@ def main(argv: list[str]| None=None):
 
     if hasattr(args,'overrides'):
         args.overrides = [*args.overrides,*overrides]
+    print(args.overrides)
     args.func(args)
 
 if __name__ == 'main':

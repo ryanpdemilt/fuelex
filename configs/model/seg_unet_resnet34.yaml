@@ -1,0 +1,5 @@
+_target_: fuelex.model.SingleSourceSegModel
+
+in_modality: aef
+in_channels: 64
+n_classes: ${dataset.n_classes}

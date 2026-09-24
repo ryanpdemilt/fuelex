@@ -7,9 +7,12 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv.*
 
 tmp
 data
 checkpoints
 outputs
+
+DRAGON_*
+*.out

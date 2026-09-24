@@ -1,0 +1,17 @@
+train:
+  resize:
+    _target_: torchvision.transforms.v2.RandomResizeCrop
+    size: ${dataset.img_size}
+  flip:
+    _target_: torchvision.transforms.v2.RandomHorizontalFlip
+    p: 0.5
+  rotate:
+    _target_: torchvision.transforms.v2.RandomRotation
+    degrees: 45
+val:
+  identity:
+    _target_: torchvision.transforms.v2.Identity
+
+test:
+  identity:
+    _target_: torchvision.transforms.v2.Identity

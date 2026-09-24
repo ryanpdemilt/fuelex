@@ -1,0 +1,23 @@
+train: true
+work_dir: ""
+seed: 2000
+
+num_workers: 4
+batch_size: 8
+epochs: 10
+
+test_num_workers: 4
+test_batch_size: 1
+
+
+ckpt_dir: null
+
+defaults:
+  - criterion: ???
+  - dataset: ???
+  - lr_scheduler: ???
+  - model: ???
+  - optimizer: ???
+  - preprocessing: ???
+  - task: ???
+  - _self_
