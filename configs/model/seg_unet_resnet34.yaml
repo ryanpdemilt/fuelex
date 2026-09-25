@@ -1,5 +1,10 @@
-_target_: fuelex.model.SingleSourceSegModel
+_target_: fuelex.model.SingleSourceSegmentationModel
 
 in_modality: aef
 in_channels: 64
-n_classes: ${dataset.n_classes}
+n_classes: null
+encoder:
+  _target_: segmentation_models_pytorch.UnetPlusPlus
+  encoder: resnet34
+  in_channels: ${model.in_channels}
+  n_classes: null

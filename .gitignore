@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv.*
 
+mlflow_log
 tmp
 data
 checkpoints

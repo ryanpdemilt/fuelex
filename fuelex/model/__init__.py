@@ -1,1 +1,1 @@
-from .seg_models import *
+from .seg_models import SingleSourceSegmentationModel

@@ -4,13 +4,17 @@ seed: 2000
 
 num_workers: 4
 batch_size: 8
-epochs: 10
 
 test_num_workers: 4
 test_batch_size: 1
 
-
 ckpt_dir: null
+
+mlflow:
+  use_mlflow: true
+  port: 5000
+
+device: cuda:0
 
 defaults:
   - criterion: ???

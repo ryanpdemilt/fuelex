@@ -1,4 +1,0 @@
-_target_: fuelex.datset.LandfireDataset
-
-data_root:
-img_size: 128

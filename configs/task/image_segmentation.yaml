@@ -1,0 +1,12 @@
+trainer:
+  _target_: fuelex.engine.segmentaion.ImageSegmentationTrainer
+  n_epochs: 100
+  ckpt_interval: 20
+  eval_interval: 5
+  log_interval: 5
+  best_metric_key: mIoU
+  use_mlflow: ${train.mlflow.use_mlflow}
+
+evaluator:
+  _target_: fuelex.engine.SegEvaluator
+  use_mlflow: ${train.mlflow.use_mlflow}
