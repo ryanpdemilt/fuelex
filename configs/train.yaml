@@ -1,5 +1,5 @@
 train: true
-work_dir: ""
+work_dir: "./output/"
 seed: 2000
 
 num_workers: 4
@@ -9,12 +9,14 @@ test_num_workers: 4
 test_batch_size: 1
 
 ckpt_dir: null
+use_final_ckpt: false
 
 mlflow:
   use_mlflow: true
+  project: AEF_Fuels_Runs
   port: 5000
 
-device: cuda:0
+device: cpu
 
 defaults:
   - criterion: ???

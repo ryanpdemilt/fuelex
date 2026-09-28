@@ -15,12 +15,12 @@ class SingleSourceSegmentationModel(nn.Module):
     ):
         super().__init__()
 
+        self.model_name = 'SingleSourceSegmentationModel'
         self.in_modality = in_modality
         self.in_channels = in_channels
         self.n_classes = n_classes
         
         self.encoder = encoder
-        print(encoder)
 
     def forward(self,inputs):
         image = inputs[self.in_modality]

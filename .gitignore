@@ -13,7 +13,7 @@ mlflow_log
 tmp
 data
 checkpoints
-outputs
+output
 
 DRAGON_*
 *.out

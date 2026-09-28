@@ -6,8 +6,8 @@ from hydra.utils import instantiate
 
 def build_transform(cfg):
     ops = []
-    for transform_name,transform_cfg in cfg.keys():
-        t = instantiate(transform_cfg)
+    for transform_name in cfg.keys():
+        t = instantiate(cfg[transform_name])
         ops.append(t)
 
     transform = Compose(ops)

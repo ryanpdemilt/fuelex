@@ -57,34 +57,34 @@ class LandfireDataset(Dataset):
         self.geometries = self.geometries[self.geometries['group'].isin(self.groups)]
 
         self.valid_labels = [label for label in self.FM40_LABELS if not any(label == ignored for ignored in self.dropped_labels)]
-        self.classes = self.valid_labels
-        self.n_classes = len(self.valid_labels)
-        self.label_encode = self.make_label_encoder()
-
-    def make_label_encoder(self):
         self.label_map = dict(zip(self.valid_labels,np.arange(len(self.valid_labels))))
-        self.label_map[-1] = self.ignore_index
-            
+        self.label_map[-1] = -1
+        self.label_map[-9999] = -1
+        self.label_encode = np.vectorize(self.encode_label)
 
-        def encode_fn(x):
-            return self.label_map[x]
+        self.classes = [str(label) for label in self.valid_labels]
+        self.n_classes = len(self.valid_labels)
+        self.num_classes = len(self.valid_labels)
+
         
-        label_encode = np.vectorize(encode_fn)
-        
-        return label_encode
+
+    def encode_label(self,x):
+        return self.label_map[x]
 
     def labels(self):
         return self.valid_labels
 
     def __getitem__(self, index):
         sample = self.geometries.iloc[index]
+        group = sample['group']
 
-        aef_fname = self.data_root / f'AEF_{self.year}_Scene{sample['sample_id']}.tif'
+        aef_fname = self.data_root / group /f'AEF_{self.year}_SCENE{sample['sample_id']}.tif'
         aef_arr = rio.open(aef_fname).read()
 
 
-        label_fname = self.data_root / f'{self.label_dataset.upper()}_{self.year}_Scene{sample['sample_id']}.tif'
-        label_arr = rio.open(label_fname).read()
+        label_fname = self.data_root / group / f'{self.label_dataset.upper()}_{self.year}_Scene{sample['sample_id']}.tif'
+        label_arr = rio.open(label_fname).read(1)
+        label_arr = label_arr.astype(np.int64)
 
         label_arr[np.isin(label_arr,np.array(self.dropped_labels))] = self.ignore_index
         label_arr = self.label_encode(label_arr)

@@ -32,6 +32,7 @@ class Trainer:
             device,
             ckpt_interval,
             eval_interval,
+            log_interval,
             best_metric_key,
             use_mlflow
     ):
@@ -46,11 +47,12 @@ class Trainer:
         self.device = device
         self.ckpt_interval = ckpt_interval
         self.eval_interval = eval_interval
+        self.log_interval = log_interval
         self.best_metric_key = best_metric_key
         self.use_mlflow = use_mlflow
 
         self.batch_per_epoch = len(self.train_loader)
-        self.logger = logging.get_logger()
+        self.logger = logging.getLogger()
 
         self.training_stats = {
             name: RunningAverageMeter(length=self.batch_per_epoch)
@@ -76,7 +78,7 @@ class Trainer:
             self.logger.info(f"============ Starting epoch {epoch} ... ============" )
 
             self.t = time.time()
-            self.train_loader.sampler.set_epoch(epoch)
+            # self.train_loader.sampler.set_epoch(epoch)
             self.train_one_epoch(epoch)
             if epoch % self.ckpt_interval == 0 and epoch != self.start_epoch:
                 self.save_model(epoch)
@@ -115,9 +117,12 @@ class Trainer:
                     f"Got infinite/NaN loss at batch {batch_idx} of epoch {epoch}!"
                 )
 
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            loss.backward()
+            self.optimizer.step()
+
+            # self.scaler.scale(loss).backward()
+            # self.scaler.step(self.optimizer)
+            # self.scaler.update()
             self.training_stats['loss'].update(loss.item())
             with torch.no_grad():
                 self.compute_logging_metrics(logits, target)
@@ -127,7 +132,7 @@ class Trainer:
             self.lr_scheduler.step()
 
             if self.use_mlflow:
-                self.ml_flow.log_metrics(
+                self.mlflow.log_metrics(
                     {
                         "train_loss": loss.item(),
                         "learning_rate": self.optimizer.param_groups[0]["lr"],
@@ -153,10 +158,10 @@ class Trainer:
             dict[str, dict | int]: checkpoint dictionary.
         """
         checkpoint = {
-            "model": self.model.module.state_dict(),
+            "model": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "lr_scheduler": self.lr_scheduler.state_dict(),
-            "scaler": self.scaler.state_dict(),
+            # "scaler": self.scaler.state_dict(),
             "epoch": epoch,
         }
         return checkpoint
@@ -176,9 +181,9 @@ class Trainer:
             is_best (bool, optional): wheter is the best checkpoint. Defaults to False.
             checkpoint (dict[str, dict  |  int] | None, optional): already prepared checkpoint dict. Defaults to None.
         """
-        if self.rank != 0:
-            torch.distributed.barrier()
-            return
+        # if self.rank != 0:
+        #     torch.distributed.barrier()
+        #     return
         checkpoint = self.get_checkpoint(epoch) if checkpoint is None else checkpoint
         suffix = "_best" if is_best else f"{epoch}_final" if is_final else f"{epoch}"
         checkpoint_path = os.path.join(self.exp_dir, f"checkpoint_{suffix}.pth")
@@ -186,7 +191,7 @@ class Trainer:
         self.logger.info(
             f"Epoch {epoch} | Training checkpoint saved at {checkpoint_path}"
         )
-        torch.distributed.barrier()
+        # torch.distributed.barrier()
         return
 
     def load_model(self, resume_path: str | pathlib.Path) -> None:
@@ -197,13 +202,13 @@ class Trainer:
         """
         model_dict = torch.load(resume_path, map_location=self.device, weights_only=False)
         if "model" in model_dict:
-            self.model.module.load_state_dict(model_dict["model"])
+            self.model.load_state_dict(model_dict["model"])
             self.optimizer.load_state_dict(model_dict["optimizer"])
             self.lr_scheduler.load_state_dict(model_dict["lr_scheduler"])
-            self.scaler.load_state_dict(model_dict["scaler"])
+            # self.scaler.load_state_dict(model_dict["scaler"])
             self.start_epoch = model_dict["epoch"] + 1
         else:
-            self.model.module.load_state_dict(model_dict)
+            self.model.load_state_dict(model_dict)
             self.start_epoch = 0
 
         self.logger.info(
@@ -330,7 +335,6 @@ class SegmentationTrainer(Trainer):
         n_epochs: int,
         exp_dir: pathlib.Path | str,
         device: torch.device,
-        precision: str,
         use_mlflow: bool,
         ckpt_interval: int,
         eval_interval: int,
@@ -365,7 +369,6 @@ class SegmentationTrainer(Trainer):
             n_epochs=n_epochs,
             exp_dir=exp_dir,
             device=device,
-            precision=precision,
             use_mlflow=use_mlflow,
             ckpt_interval=ckpt_interval,
             eval_interval=eval_interval,

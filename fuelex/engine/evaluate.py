@@ -57,7 +57,7 @@ class Evaluator:
         self.classes = self.val_loader.dataset.classes
         self.split = self.val_loader.dataset.split
         self.ignore_index = self.val_loader.dataset.ignore_index
-        self.num_classes = len(self.classes)
+        self.num_classes = len(self.val_loader.dataset.classes)
         self.max_name_len = max([len(name) for name in self.classes])
         
         # Compute valid class indices (excluding ignore index)
@@ -135,7 +135,7 @@ class SegEvaluator(Evaluator):
 
         for batch_idx, data in enumerate(tqdm(self.val_loader, desc=tag)):
 
-            intput, target = data["input"], data["target"]
+            input, target = data["input"], data["target"]
             input = {k: v.to(self.device) for k, v in input.items()}
             target = target.to(self.device)
 
@@ -153,9 +153,9 @@ class SegEvaluator(Evaluator):
             )
             confusion_matrix += count.view(self.num_classes, self.num_classes)
 
-        torch.distributed.all_reduce(
-            confusion_matrix, op=torch.distributed.ReduceOp.SUM
-        )
+        # torch.distributed.all_reduce(
+        #     confusion_matrix, op=torch.distributed.ReduceOp.SUM
+        # )
         metrics = self.compute_metrics(confusion_matrix.cpu())
         self.log_metrics(metrics)
 

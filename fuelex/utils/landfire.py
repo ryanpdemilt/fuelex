@@ -64,7 +64,7 @@ def sample_landfire_ims(work_dir,src_path,dataset,year,geometry,dst_scale=30,n_j
                 'count':1,
                 'crs':geometry.crs,
                 'transform':dst_transform,
-                'dtype':'uint16',
+                'dtype':'int16',
                 'driver':'GTiff'
             }
 

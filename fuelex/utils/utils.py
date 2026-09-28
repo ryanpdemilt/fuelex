@@ -29,3 +29,27 @@ def fix_seed(seed):
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+def _find_ckpt(exp_dir: str | Path, suffix: str) -> Optional[str]:
+    """Return the *first* file that ends with `suffix`; None if nothing found."""
+    exp_dir = Path(exp_dir)
+    for fname in exp_dir.iterdir():
+        if fname.name.endswith(suffix):
+            return str(fname)
+    # Nothing found – warn once.
+    _log.warning(
+        "No checkpoint matching '*%s' found in %s. "
+        "If this was a k-NN probe (no training), you can ignore this warning. Otherwise, check your experiment directory.",
+        suffix, exp_dir,
+    )
+    return None
+
+def get_best_model_ckpt_path(exp_dir: str | Path) -> Optional[str]:
+    """Return '<exp_dir>/…_best.pth' or None when it does not exist."""
+    return _find_ckpt(exp_dir, "_best.pth")
+
+
+def get_final_model_ckpt_path(exp_dir: str | Path) -> Optional[str]:
+    """Return '<exp_dir>/…_final.pth' or None when it does not exist."""
+    return _find_ckpt(exp_dir, "_final.pth")

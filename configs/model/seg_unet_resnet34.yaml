@@ -7,4 +7,4 @@ encoder:
   _target_: segmentation_models_pytorch.UnetPlusPlus
   encoder: resnet34
   in_channels: ${model.in_channels}
-  n_classes: null
+  classes: null

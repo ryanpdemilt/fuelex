@@ -175,8 +175,7 @@ def main(argv: list[str]| None=None):
     args = parser.parse_args(argv)
 
     if hasattr(args,'overrides'):
-        args.overrides = [*args.overrides,*overrides]
-    print(args.overrides)
+        args.overrides = [*overrides]
     args.func(args)
 
 if __name__ == 'main':

@@ -1,4 +1,4 @@
-_target_: fuelex.utils.MultiStepLR
+_target_: fuelex.utils.schedulers.MultiStepLRBuilder
 optimizer: null
 total_iters: null
 lr_milestones: [0.6, 0.9]
