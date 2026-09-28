@@ -121,9 +121,9 @@ class SegEvaluator(Evaluator):
             model_dict = torch.load(model_ckpt_path, map_location=self.device, weights_only=False)
             model_name = os.path.basename(model_ckpt_path).split(".")[0]
             if "model" in model_dict:
-                model.module.load_state_dict(model_dict["model"])
+                model.load_state_dict(model_dict["model"])
             else:
-                model.module.load_state_dict(model_dict)
+                model.load_state_dict(model_dict)
 
             self.logger.info(f"Loaded {model_name} for evaluation")
         model.eval()
