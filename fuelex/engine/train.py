@@ -152,6 +152,7 @@ def run_train(args):
     logger.info(pprint.pformat(OmegaConf.to_container(cfg), compact=True).strip("{}"))
     logger.info("The experiment is stored in %s\n" % exp_dir)
     logger.info(f"Device used: {device}")
+    OmegaConf.save(cfg, config_log_dir / "config.yaml")
 
     train_transform, test_transform, val_transform = preprocessor_factory(cfg)
     train_dataset, test_dataset, val_dataset = dataset_factory(cfg,(train_transform,test_transform,val_transform))
@@ -191,6 +192,7 @@ def run_train(args):
     cfg.model.n_classes = train_dataset.n_classes
     cfg.model.encoder.classes = train_dataset.n_classes
     model = model_factory(cfg)
+    model.to(device)
     logger.info("Built {}.".format(model.model_name))
 
     criterion = criterion_factory(cfg)
