@@ -35,7 +35,7 @@ def check_and_make_dir(dir):
         os.makedirs(dir)
 
 @retry(tries=5,delay=1,backoff=2)
-def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_blocks=None,padding=10):
+def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_blocks=None,padding=5):
     aef = ee.ImageCollection('GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL').filter(ee.Filter.calendarRange(year,year,'year')).mosaic()
 
     scene_id = geometry['sample_id']
