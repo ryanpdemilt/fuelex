@@ -11,7 +11,7 @@ from rich import print
 
 from fuelex.utils import partition, union
 
-def sample_images_from_geo_by_key(dataset_name,geodf,key_name,spatial_size_pixels,spatial_gsd,n_sample_ims,out_file,splits=None,split_sizes=None,seed=2000):
+def sample_images_from_geo_by_key(dataset_name,geodf,key_name,spatial_size_pixels,spatial_gsd,n_sample_ims,out_file,dst_crs=None,splits=None,split_sizes=None,seed=2000):
     spatial_size = spatial_size_pixels*spatial_gsd
     # try:
     #     if isinstance(geo_file,str) and geo_file.split('.') == 'parquet':
@@ -26,6 +26,9 @@ def sample_images_from_geo_by_key(dataset_name,geodf,key_name,spatial_size_pixel
         groups = list(geodf[key_name].unique())
     else:
         print(f'[red]Error[\red]: {key_name} not found in geometry groups')
+
+    if dst_crs:
+        geodf = geodf.to_crs(dst_crs)
 
     sample_groups = []
 

@@ -31,20 +31,20 @@ zone_to_superzone_map = dict([(v_prime,k) for (k,v) in SUPERZONES.items() for v_
 def map_superzone(zone):
     return zone_to_superzone_map[zone]
 
-def sample_from_landfire_geometry(expname,geo_file,group_names,n_samples_per_group,img_size,out_file,splits=None,split_sizes=None,seed=2000):
+def sample_from_landfire_geometry(expname,geo_file,group_names,n_samples_per_group,img_size,out_file,dst_crs=None,splits=None,split_sizes=None,seed=2000):
     landfire_gsd = 30
     geodf = gpd.read_file(geo_file)
     geodf['superzone'] = geodf['ZONE_NUM'].map(lambda x: zone_to_superzone_map[x])
-    sample_output_file = sample_images_from_geo_by_key(expname,geodf,group_names,img_size,landfire_gsd,n_samples_per_group,out_file,splits,split_sizes,seed)
+    sample_output_file = sample_images_from_geo_by_key(expname,geodf,group_names,img_size,landfire_gsd,n_samples_per_group,out_file,dst_crs,splits,split_sizes,seed)
 
 
 def sample_landfire_ims(work_dir,src_path,dataset,year,geometry,dst_scale=30,n_jobs=1):
 
     with rio.open(src_path / f"LF{year}_{dataset.upper()}_CONUS.tif") as src_rst:
 
-        for idx, sample in geometry.iterrows():
-            outfilename = f'{dataset.upper()}_{year}_Scene{sample['sample_id']}.tif'
-            geo = sample.geometry
+        for idx, sample_tile in geometry.iterrows():
+            outfilename = f'{dataset.upper()}_{year}_Scene{sample_tile['sample_id']}.tif'
+            geo = sample_tile.geometry
             left, bottom, right,top = geo.bounds
             window = from_bounds(
                 transform=src_rst.transform,
@@ -53,9 +53,9 @@ def sample_landfire_ims(work_dir,src_path,dataset,year,geometry,dst_scale=30,n_j
                 right=right,
                 top=top
             )
-
             sample = src_rst.read(1,window=window)
             h,w = sample.shape
+            print(np.unique(sample))
 
             dst_transform = A.translation(left - dst_scale /2, top - dst_scale / 2) * A.scale(dst_scale,-dst_scale)
             dst_kwargs = {
