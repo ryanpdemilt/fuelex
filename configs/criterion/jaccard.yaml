@@ -1,2 +1,4 @@
 _target_: segmentation_models_pytorch.losses.JaccardLoss
+mode: multiclass
+from_logits: true
 ignore_index: ${dataset.ignore_index}

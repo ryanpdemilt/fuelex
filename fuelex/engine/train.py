@@ -104,8 +104,6 @@ def preprocessor_factory(cfg):
 
     return train_transform, test_transform, val_transform
 
-    
-
 def run_train(args):
     config_path = args.config_path
     config_name = args.config_name
@@ -152,7 +150,7 @@ def run_train(args):
     logger.info(pprint.pformat(OmegaConf.to_container(cfg), compact=True).strip("{}"))
     logger.info("The experiment is stored in %s\n" % exp_dir)
     logger.info(f"Device used: {device}")
-    OmegaConf.save(cfg, config_log_dir / "config.yaml")
+    
 
     train_transform, test_transform, val_transform = preprocessor_factory(cfg)
     train_dataset, test_dataset, val_dataset = dataset_factory(cfg,(train_transform,test_transform,val_transform))
@@ -201,6 +199,9 @@ def run_train(args):
     total_iters = len(train_loader) * epochs
     lr_scheduler = lr_scheduler_factory(cfg,optimizer=optimizer,total_iters=total_iters)
 
+    #save config with alterations
+    OmegaConf.save(cfg, config_log_dir / "config.yaml")
+
     trainer = instantiate(
         cfg.task.trainer,
         model=model,
@@ -213,9 +214,6 @@ def run_train(args):
         device=device,
         use_mlflow=use_mlflow
     )
-
-    
-
     trainer.fit()
 
     if cfg.use_final_ckpt:

@@ -3,7 +3,7 @@ work_dir: "./output/"
 seed: 2000
 
 num_workers: 4
-batch_size: 8
+batch_size: 64
 
 test_num_workers: 4
 test_batch_size: 1
@@ -14,9 +14,9 @@ use_final_ckpt: false
 mlflow:
   use_mlflow: true
   project: AEF_Fuels_Runs
-  port: 5000
+  port: 8080
 
-device: cpu
+device: cuda:0
 
 defaults:
   - criterion: ???

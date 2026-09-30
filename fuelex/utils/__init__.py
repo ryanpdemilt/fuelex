@@ -1,4 +1,4 @@
-from .geo import grid_bounds, partition, union
+from .geo import grid_bounds, partition, union,get_grid_from_gdf
 from .landfire import sample_from_landfire_geometry,sample_landfire_ims
 
 from .utils import (

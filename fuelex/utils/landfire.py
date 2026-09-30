@@ -55,7 +55,6 @@ def sample_landfire_ims(work_dir,src_path,dataset,year,geometry,dst_scale=30,n_j
             )
             sample = src_rst.read(1,window=window)
             h,w = sample.shape
-            print(np.unique(sample))
 
             dst_transform = A.translation(left - dst_scale /2, top - dst_scale / 2) * A.scale(dst_scale,-dst_scale)
             dst_kwargs = {

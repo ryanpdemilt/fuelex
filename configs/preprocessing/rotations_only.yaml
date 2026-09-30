@@ -1,0 +1,19 @@
+train:
+  center:
+    _target_: torchvision.transforms.v2.CenterCrop
+    size: ${dataset.img_size}
+  flip:
+    _target_: torchvision.transforms.v2.RandomHorizontalFlip
+    p: 0.5
+  rotate:
+    _target_: torchvision.transforms.v2.RandomRotation
+    degrees: 45
+val:
+  center:
+    _target_: torchvision.transforms.v2.CenterCrop
+    size: ${dataset.img_size}
+
+test:
+  center:
+    _target_: torchvision.transforms.v2.CenterCrop
+    size: ${dataset.img_size}
