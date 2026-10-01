@@ -23,9 +23,13 @@ class SingleSourceSegmentationModel(nn.Module):
         self.encoder = encoder
 
     def forward(self,inputs):
-        image = inputs[self.in_modality]
-
-        logits = self.encoder(image)
+        if isinstance(inputs,dict):
+            image = inputs[self.in_modality]
+            logits = self.encoder(image)
+        elif isinstance(inputs,torch.Tensor):
+            logits = self.encoder(inputs)
+        else:
+            raise ValueError('Unrecognized encoder input')
 
         return logits
     

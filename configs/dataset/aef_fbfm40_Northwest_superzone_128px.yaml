@@ -1,7 +1,7 @@
 _target_: fuelex.dataset.LandfireDataset
 
-data_root: /mnt/data/rdemilt/fuelex/
-geometry_root: /home/rdemilt/redsky/fuelex/data/
+data_root: /home/rpdemilt/SIG/fuels/fuelex/data/fuelex_dataset
+geometry_root: /home/rpdemilt/SIG/fuels/fuelex/data/
 img_size: 128
 group_name: superzone
 groups:

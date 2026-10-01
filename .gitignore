@@ -12,8 +12,10 @@ wheels/
 mlflow_log
 tmp
 data
+logs
 checkpoints
 output
+maps
 
 DRAGON_*
 *.out
