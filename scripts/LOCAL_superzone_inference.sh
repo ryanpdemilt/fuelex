@@ -7,7 +7,7 @@ uv run fuelex inference \
     --exp-dir $EXP_DIR \
     --device cuda:0 \
     --geometry-path $GEO_DIR \
-    --group-name ZONE_NAME\
+    --group-name ZONE_NUM\
     --groups 57 \
     --year 2025 \
     --out-path $OUT_DIR \

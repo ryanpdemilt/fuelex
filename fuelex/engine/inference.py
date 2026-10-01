@@ -44,6 +44,17 @@ AEF_BANDS = [f'A{str(i).zfill(2)}' for i in range(64)]
 AEF_CRS='EPSG:4326'
 AEF_GSD=10
 
+
+FM40_LABELS = [
+    91, 92, 93, 98, 99,
+    101, 102, 103, 104, 105, 106, 107, 108, 109,
+    121, 122, 123, 124,
+    141, 142, 143, 144, 145, 146, 147, 148, 149,
+    161, 162, 163, 164, 165,
+    181, 182, 183, 184, 185, 186, 187, 188, 189,
+    201, 202, 203, 204,
+]
+
 def get_inference_info(group_name,groups,year):
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
     
@@ -71,10 +82,10 @@ def load_model(exp_dir,device,logger,cfg):
 def pull_single_aef_image(grid_cell,year,dst_crs,dst_scale,band_groups,padding):
     aef = ee.ImageCollection('GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL').filter(ee.Filter.calendarRange(year,year,'year')).mosaic()
     
-    scene_id = grid_cell['sample_id']
+    # scene_id = grid_cell['sample_id']
 
-    left, bottom, right, top = grid_cell.geometry.bounds
-    centroid = grid_cell.geometry.centroid
+    left, bottom, right, top = grid_cell.bounds
+    centroid = grid_cell.centroid
     x,y = centroid.x, centroid.y
     pixels = int((right - left) / dst_scale)
     aef_bbox = ee.Geometry.Point((x,y),proj=ee.Projection(dst_crs)).buffer((pixels+padding)*30,proj=ee.Projection(dst_crs))
@@ -120,7 +131,7 @@ def pull_single_aef_image(grid_cell,year,dst_crs,dst_scale,band_groups,padding):
 
 def pull_aef_batch(batch_geometries,year,dst_crs,dst_scale,padding,band_groups,n_jobs):
 
-    batch_items = [row for idx,row in batch_geometries.iterrows()]
+    batch_items = [row for idx,row in batch_geometries.items()]
 
     pool = ThreadPool(processes=n_jobs)
 
@@ -128,33 +139,37 @@ def pull_aef_batch(batch_geometries,year,dst_crs,dst_scale,padding,band_groups,n
 
     results = pool.map(f,batch_items)
 
-    aef_batch = np.stack([aef_batch_item for aef_batch_item in results],dim=0)
+    aef_batch = np.stack([aef_batch_item for aef_batch_item in results],axis=0)
 
     return aef_batch
 
 def submit_to_gpu_for_prediction(model,aef_batch,device):
-        aef_batch = torch.from_numpy(aef_batch).float().to(device)
+        aef_batch = torch.from_numpy(aef_batch.astype(np.float64)).float().to(device)
         logits = model(aef_batch)
         aef_pred = torch.argmax(torch.softmax(logits,dim=1),dim=1).cpu().numpy()
 
         return aef_pred
 
-def write_batch_to_rst(aef_pred,batch_geometries,dst_rst):
-    for i, row in batch_geometries.iterrows():
-        left,bottom,right,top = row.geometry.bounds
-        window = from_bounds(
-            transform=dst_rst.transform,
-            left=left,
-            bottom=bottom,
-            right=right,
-            top=top
-        )
-        dst_rst.write(aef_pred[i],window=window,indexes=1)
+def write_batch_to_rst(aef_pred,batch_geometries,dst_rst_kwargs):
+    with rio.open(**dst_rst_kwargs) as dst_rst:
+        for i, (idx,row) in enumerate(batch_geometries.items()):
+            left,bottom,right,top = row.bounds
+            window = from_bounds(
+                transform=dst_rst.transform,
+                left=left,
+                bottom=bottom,
+                right=right,
+                top=top
+            )
+            dst_rst.write(aef_pred[i],window=window,indexes=1)
+        print('Wrote batch to rst')
 
-def inference_event_loop(model,batch_size,geodf,year,dst_crs,dst_scale,padding,band_groups,device,n_jobs,dst_rst):
+def inference_event_loop(model,batch_size,geodf,year,dst_crs,dst_scale,padding,band_groups,device,n_jobs,dst_rst_kwargs):
     idxs = np.arange(len(geodf))
 
-    batch_idxs = np.array_split(idxs,batch_size)
+    num_batches = len(idxs) // batch_size
+    batch_idxs = np.array_split(idxs,num_batches)
+    print(f'Number of Batches to Process: {num_batches}')
 
     f = partial(
         pull_aef_batch,
@@ -163,30 +178,41 @@ def inference_event_loop(model,batch_size,geodf,year,dst_crs,dst_scale,padding,b
         dst_scale=dst_scale,
         padding=padding,
         band_groups=band_groups,
-        n_jobs=n_jobs,
-        dst_rst=dst_rst
+        n_jobs=n_jobs
     )
 
     #retrieve first batch
     current_batch_geometries = geodf.iloc[batch_idxs[0]]
-    current_aef_batch = pull_aef_batch(current_batch_geometries)
+    current_aef_batch = f(current_batch_geometries)
 
     executor = ThreadPoolExecutor(max_workers=1)
+    write_executor = ThreadPoolExecutor(max_workers=1)
 
     for i, batch in enumerate(batch_idxs[1:]):
+        print(f'Procesing Batch {i}')
         
         next_batch_geometries = geodf.iloc[batch]
         future = executor.submit(f,next_batch_geometries)
 
         current_aef_batch_preds = submit_to_gpu_for_prediction(model,current_aef_batch,device)
-        write_batch_to_rst(
+
+        write_executor.submit(
+            write_batch_to_rst,
             aef_pred=current_aef_batch_preds,
             batch_geometries=current_batch_geometries,
-            dst_rst=dst_rst
+            dst_rst_kwargs=dst_rst_kwargs
         )
+        # write_batch_to_rst(
+        #     aef_pred=current_aef_batch_preds,
+        #     batch_geometries=current_batch_geometries,
+        #     dst_rst=dst_rst
+        # )
 
         current_batch_geometries = next_batch_geometries
         current_aef_batch = future.result()
+
+def log(logger,current_batch,total_batches):
+    pass
 
 def run_inference(args):
     exp_dir = Path(args.exp_dir)
@@ -208,7 +234,10 @@ def run_inference(args):
     if source == 'ee':
         project = args.project
         ee.Authenticate()
-        ee.Initialize(project=project)
+        ee.Initialize(
+            project=project,
+            opt_url='https://earthengine-highvolume.googleapis.com'
+        )
     n_jobs = args.n_jobs
 
     exp_name = get_inference_info(group_name,groups,year)
@@ -217,6 +246,7 @@ def run_inference(args):
     logger = init_logger(log_dir)
 
     geodf = gpd.read_file(geometry_path)
+    print(geodf)
     geodf[group_name] = geodf[group_name].astype(str)
     geodf = geodf.to_crs(crs)
     geodf = geodf[geodf[group_name].isin(groups)]
@@ -234,10 +264,14 @@ def run_inference(args):
     logger.info(f'Loading configs from @{cfg_path}')
 
     img_size = cfg.dataset.img_size
+    dropped_labels = cfg.dataset.dropped_labels
+    valid_labels = [label for label in FM40_LABELS if not any(label == ignored for ignored in dropped_labels)]
+    label_map = dict(zip(valid_labels,np.arange(len(valid_labels))))
 
     train_transform, test_transform, val_transform = preprocessor_factory(cfg)
 
     model = load_model(exp_dir,device,logger,cfg)
+    model = model.to(device)
 
     for group in groups:
         group_geo = geodf[geodf[group_name] == group]
@@ -246,6 +280,8 @@ def run_inference(args):
         
         dst_raster_name = out_path / f'{group_name}_{group}_{year}_prediction.tif'
         dst_rst_kwargs = {
+            'fp':dst_raster_name,
+            'mode':'w',
             'crs':crs,
             'transform':dst_transform,
             'count':1,
@@ -256,7 +292,8 @@ def run_inference(args):
             'nodata':-9999
         }
     
-        dst_rst = rio.open(dst_raster_name,'w',**dst_rst_kwargs)
+        dst_rst = rio.open(**dst_rst_kwargs)
+        dst_rst.close()
         logger.info(f'Initialized output raster @{dst_rst}')
 
         inference_event_loop(
@@ -269,7 +306,8 @@ def run_inference(args):
             padding=padding,
             band_groups=band_groups,
             device=device,
-            n_jobs=n_jobs
+            n_jobs=n_jobs,
+            dst_rst_kwargs=dst_rst_kwargs
         )
 
 
