@@ -1,0 +1,14 @@
+_target_: fuelex.dataset.LandfireDataset
+
+data_root: /home/rdemilt/redsky/fuelex/data/fuelex_dataset/
+geometry_root: /home/rdemilt/redsky/fuelex/data/
+img_size: 128
+group_name: superzone
+groups:
+  - South Central West
+ims_per_group: 3000
+dataset_name: fuelex
+year: 2024
+label_dataset: fbfm40
+ignore_index: -1
+dropped_labels: [91,92,93,98,99]
