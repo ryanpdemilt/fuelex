@@ -142,6 +142,9 @@ def _build_parser(mode: str):
     inference.add_argument('--mask-src',type=str)
     inference.add_argument('--n-classes',type=int)
     inference.add_argument('--n-jobs',type=int)
+    inference.add_argument('--cache-dir',type=str)
+    inference.add_argument('--cache-size',type=int,default=10)
+    inference.add_argument('--cleanup',action='store_true')
 
     _add_override_arg(inference)
     inference.set_defaults(func=_cmd_inference)

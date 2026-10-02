@@ -49,5 +49,6 @@ def get_grid_from_gdf(geodf,delta):
     ugeo = union(geodf.geometry)
 
     grid = gpd.GeoSeries(partition(ugeo.iloc[0],delta))
+    grid = grid.set_crs(geodf.crs)
 
     return grid

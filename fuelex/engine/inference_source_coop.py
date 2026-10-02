@@ -10,7 +10,7 @@ import asyncio
 import subprocess
 from pathlib import Path
 
-import tqdm
+from tqdm import tqdm
 
 import numpy as np
 import geopandas as gpd
@@ -274,9 +274,10 @@ def aef_ineference_event_loop(
 
     aef_tiles_ids = overlapping_aef_tiles['id'].unique()
 
-    n_groups = len(aef_tiles_ids // cache_size)
+    n_groups = len(aef_tiles_ids) // cache_size
     aef_groups = np.array_split(aef_tiles_ids,n_groups)
     for group in aef_groups:
+        print('Print processing cache region')
         inference_futures = []
 
         current_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]].iloc[0]
@@ -338,7 +339,7 @@ def run_inference_source_coop(args):
     batch_size = args.batch_size
     padding = args.padding
     log_dir = Path(args.log_dir)
-    clenaup = args.cleanup
+    cleanup = args.cleanup
     n_jobs = args.n_jobs
 
     exp_name = get_inference_info(group_name,groups,year)
@@ -379,6 +380,7 @@ def run_inference_source_coop(args):
         group_geo = geodf[geodf[group_name] == group]
 
         grid = get_grid_from_gdf(group_geo,img_size*scale)
+        grid = gpd.GeoDataFrame(geometry=grid,crs=grid.crs)
         
         dst_raster_name = out_path / f'{group_name}_{group}_{year}_prediction.tif'
         dst_rst_kwargs = {
