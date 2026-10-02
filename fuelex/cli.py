@@ -6,6 +6,7 @@ from pathlib import Path
 
 from yaml import safe_load
 
+import pandas as pd
 import geopandas as gpd
 
 import hydra
@@ -16,7 +17,7 @@ from rich import print
 
 from .retrieval import AEFManager,get_aef_gee
 from .utils import sample_from_landfire_geometry,sample_landfire_ims
-from .engine import run_train,run_inference
+from .engine import run_train,run_inference,run_inference_source_coop
 
 def _add_override_arg(parser: argparse.ArgumentParser):
     parser.add_argument(
@@ -30,7 +31,10 @@ def _cmd_train(args: argparse.Namespace) -> None:
     run_train(args)
 
 def _cmd_inference(args: argparse.Namespace) -> None:
-    run_inference(args)
+    if args.source == 'ee':
+        run_inference(args)
+    elif args.source == 'source.coop':
+        run_inference_source_coop(args)
 
 def _cmd_sample(args: argparse.Namespace)->None:
     if args.dataset == 'landfire':
@@ -50,7 +54,12 @@ def _cmd_sample(args: argparse.Namespace)->None:
         raise NotImplementedError('Unrecognized dataset sampling type')
 
 def _cmd_retrieve(args: argparse.Namespace)->None:
-    geodf = gpd.read_file(args.geometry)
+    geodfs =[]
+    for fp in args.geometry:
+        geodfs.append(gpd.read_file(fp))
+    geodf = pd.concat(geodfs)
+    geodf = gpd.GeoDataFrame(geodf,geometry=geodf.geometry)
+
     if args.groups is None:
         args.groups = list(geodf['group'].unique())
 
@@ -157,7 +166,7 @@ def _build_parser(mode: str):
     retrieve = sub.add_parser('retrieve')
 
     retrieve.add_argument('--dataset',type=str,default='FBFM40')
-    retrieve.add_argument('--geometry',type=str)
+    retrieve.add_argument('--geometry',type=str,nargs='+')
     retrieve.add_argument('--groups',type=str,nargs='+')
     retrieve.add_argument('--cache-dir',type=str,default=None)
     retrieve.add_argument('--work-dir',type=str,default=None)

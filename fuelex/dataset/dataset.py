@@ -78,7 +78,7 @@ class LandfireDataset(Dataset):
         sample = self.geometries.iloc[index]
         group = sample['group'].replace(' ', '_')
 
-        aef_fname = self.data_root / group /f'AEF_{self.year}_SCENE{sample['sample_id']}.tif'
+        aef_fname = self.data_root / group /f'AEF_{self.year}_Scene{sample['sample_id']}.tif'
         aef_arr = rio.open(aef_fname).read()
 
 

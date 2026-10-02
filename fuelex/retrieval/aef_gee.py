@@ -53,7 +53,7 @@ def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_bl
     # region = ee.Geometry.BBox(aef_left,aef_bottom,aef_right,aef_top)
 
     pixels = int((right - left) / dst_scale)
-    aef_bbox = ee.Geometry.Point((x,y),proj=ee.Projection(dst_crs)).buffer((pixels+padding)*30,proj=ee.Projection(dst_crs))
+    aef_bbox = ee.Geometry.Point((x,y),proj=ee.Projection(dst_crs)).buffer((pixels+padding)*dst_scale,proj=ee.Projection(dst_crs))
 
     transform = A.translation(left - dst_scale / 2,top - dst_scale / 2) * A.scale(dst_scale,-dst_scale)
 

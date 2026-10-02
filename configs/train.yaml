@@ -12,7 +12,7 @@ ckpt_dir: null
 use_final_ckpt: false
 
 mlflow:
-  use_mlflow: true
+  use_mlflow: false
   project: AEF_Fuels_Runs
   port: 8080
 

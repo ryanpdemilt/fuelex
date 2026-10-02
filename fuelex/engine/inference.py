@@ -62,6 +62,14 @@ def get_inference_info(group_name,groups,year):
 
     return exp_name
 
+def load_config(exp_dir,logger):
+    cfg_path = exp_dir / 'configs' / 'config.yaml'
+    cfg = OmegaConf.load(cfg_path)
+    logger.info(f'Loading configs from @{cfg_path}')
+
+    return cfg
+
+
 def load_model(exp_dir,device,logger,cfg):
 
     final_model_ckpt_path = get_best_model_ckpt_path(exp_dir)
@@ -259,9 +267,7 @@ def run_inference(args):
     height = (top - bottom) / scale
  
 
-    cfg_path = exp_dir / 'configs' / 'config.yaml'
-    cfg = OmegaConf.load(cfg_path)
-    logger.info(f'Loading configs from @{cfg_path}')
+    cfg = load_config(exp_dir,logger)
 
     img_size = cfg.dataset.img_size
     dropped_labels = cfg.dataset.dropped_labels

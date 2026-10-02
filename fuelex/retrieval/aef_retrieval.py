@@ -24,7 +24,7 @@ from rasterio.windows import Window, from_bounds, bounds
 
 from functools import partial
 import multiprocessing as mp
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 
 # from fuelex.utils import DownloadCache
 
@@ -98,7 +98,7 @@ class AEFManager:
         aef_parquet_index = gpd.read_parquet(parquet_file)
         return aef_parquet_index
 
-    def pull_aef_sample(self,sample_id,grid_geom,grid_tile,padding=10):
+    def pull_aef_sample(self,sample_id,grid_geom,grid_tile,padding=10,write_out=True):
         dst_crs = self.dst_crs
         dst_bounds = grid_geom.geometry.bounds
         dst_left, dst_bottom, dst_right, dst_top = dst_bounds
@@ -224,8 +224,6 @@ class AEFManager:
                             print('Empty window intersection found, subset not assigned')
                         # print(intersecting_window.width,intersecting_window.height)
 
-
-
         c, h, w = sample.shape
         dst_kwargs = {
             'crs':dst_crs,
@@ -237,9 +235,12 @@ class AEFManager:
             'dtype':'int16',
             'nodata':-128
         } 
-        with rio.open(self.work_dir / outfile_name,'w',**dst_kwargs) as dst_rst:
-            for i in range(c):
-                dst_rst.write(sample[i],i+1)    
+        if write_out:
+            with rio.open(self.work_dir / outfile_name,'w',**dst_kwargs) as dst_rst:
+                for i in range(c):
+                    dst_rst.write(sample[i],i+1)
+        else:
+            return sample    
 
 
     def cache_aef_tile(self,href):
@@ -263,11 +264,62 @@ class AEFManager:
             except:
                 print(f'Unable to clear {file} from cache')
 
-    # async def producer(self,dependency_group,overlapping_aef_tiles):
-    #     pass
-    # async def consumer(self,queue):
-    #     while True:
-    #         pass
+    def process_cached_group_tiles(self,cc,overlapping_aef_tiles,n_jobs):
+        group_aef_tiles = overlapping_aef_tiles[overlapping_aef_tiles['id'].isin(cc)]
+        pool = mp.Pool(processes=n_jobs)
+        
+        combinations = []
+        group_sample_ids = group_aef_tiles['sample_id'].unique()
+        for sample_id in group_sample_ids:
+            sample_geometry = group_aef_tiles[group_aef_tiles.sample_id == sample_id].iloc[0]              
+            sample_aef_tiles = group_aef_tiles[group_aef_tiles.sample_id == sample_id]
+
+            element = (sample_id,sample_geometry,sample_aef_tiles)
+            combinations.append(element)
+
+        pool.starmap(self.pull_aef_sample,combinations)
+        pool.close()
+
+    def cache_connected_group(self,cc,overlapping_aef_tiles):
+        group_aef_tiles = overlapping_aef_tiles[overlapping_aef_tiles['id'].isin(cc)]
+        for idx, row in group_aef_tiles.iterrows():
+            self.cache_aef_tile(row)
+
+    def aef_download_event_loop(self,ccs,overlapping_aef_tiles,n_jobs=1,cleanup=True):
+        tile_dl_executor = ThreadPoolExecutor(max_workers=1)
+        group_processing_executor = ThreadPoolExecutor(max_workers=1)
+        f = partial(
+            self.cache_connected_group,
+            overlapping_aef_tiles=overlapping_aef_tiles
+        )
+
+        g = partial(
+            self.process_cached_group_tiles,
+            overlapping_aef_tiles=overlapping_aef_tiles,
+            n_jobs=n_jobs
+        )
+
+        futures = [tile_dl_executor.submit(f,cc) for cc in ccs]
+
+        group_processing_futures = []
+
+        for cc,future in zip(ccs,futures):
+            #Await download of cached tiles
+            future.result()
+
+            group_processing_futures.append(
+                group_processing_executor.submit(
+                    g,
+                    cc
+                )
+            )
+
+        results = [future.result() for future in group_processing_futures]
+
+        if cleanup:
+            self.clean_cache()
+
+    
 
     def get_aef_samples(self,grid,n_jobs=1,buffer=300,cleanup=True):
         aef_index = self.check_and_get_geoparquet()
@@ -288,14 +340,12 @@ class AEFManager:
         dependency_graph.remove_edges_from(list(nx.selfloop_edges(dependency_graph)))
         ccs = nx.connected_components(dependency_graph)
         
-
         groups = []
         cc = next(ccs)
         current_group = [cc]
         group_size = len(cc)
 
         for cc in ccs:
-            print(cc)
             new_elements = len(cc)
             if (group_size + new_elements) > self.cache_size:
                 groups.append(current_group)
@@ -307,28 +357,12 @@ class AEFManager:
         groups.append(current_group)
 
         for group in groups:
-            for cc in group:
-                print(cc)
-                group_aef_tiles = overlapping_aef_tiles[overlapping_aef_tiles['id'].isin(cc)]
-                for idx, row in group_aef_tiles.iterrows():
-                    self.cache_aef_tile(row)
-
-                pool = mp.Pool(processes=n_jobs)
-
-                combinations = []
-                group_sample_ids = group_aef_tiles['sample_id'].unique()
-                for sample_id in group_sample_ids:
-                    sample_geometry = group_aef_tiles[group_aef_tiles.sample_id == sample_id].iloc[0]              
-                    sample_aef_tiles = group_aef_tiles[group_aef_tiles.sample_id == sample_id]
-
-                    element = (sample_id,sample_geometry,sample_aef_tiles)
-                    combinations.append(element)
-
-                pool.starmap(self.pull_aef_sample,combinations)
-                pool.close()
-
-            if cleanup:
-                self.clean_cache()
+            self.aef_download_event_loop(
+                group, 
+                overlapping_aef_tiles,
+                n_jobs,
+                cleanup
+            )
 
     def build_dependency_graph(self,dependency_list):
         nodes = set(str(element) for arr in dependency_list for element in arr)
