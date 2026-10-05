@@ -297,10 +297,12 @@ def run_inference(args):
             'dtype':np.int16,
             'nodata':-9999
         }
+        
     
         dst_rst = rio.open(**dst_rst_kwargs)
         dst_rst.close()
         logger.info(f'Initialized output raster @{dst_rst}')
+        dst_rst_kwargs.update({'mode':'r+'})
 
         inference_event_loop(
             model=model,

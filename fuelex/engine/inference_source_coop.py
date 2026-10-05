@@ -81,20 +81,60 @@ def check_and_get_geoparquet(cache_dir):
     aef_parquet_index = gpd.read_parquet(parquet_file)
     return aef_parquet_index
 
-def cache_aef_tile(cache_dir,href):
+def cache_aef_tile(cache_dir,href,dst_crs=None,dst_scale=None):
     dl_link = href['assets']['data']['href'].split('/')
+    output_file_name = dl_link[-1]
     dl_link.pop(2)
     dl_link = '/'.join(dl_link)
     
-    if (cache_dir / dl_link.split('/')[-1]).exists():
+    if (cache_dir / output_file_name).exists():
         print(f'Found cached file')
     else:
         print(f'Initiating download for {dl_link}')
         subprocess.run(['aws','s3','cp', dl_link, cache_dir, '--endpoint-url', 'https://data.source.coop','--no-sign-request'])
         print(f'Completing download for {dl_link}')
 
-def clean_cache(self):
-    tif_files = self.cache_dir.glob('*.tiff')
+    if dst_crs and dst_scale:
+        with rio.open(cache_dir / output_file_name) as src_rst:
+            src_transform = src_rst.transform
+            src_crs = src_rst.crs
+            src_bounds = src_rst.bounds
+            src_left,src_bottom,src_right,src_top = src_rst.bounds
+            width, height = src_rst.width, src_rst.height
+
+            warp_transform, warp_width, warp_height = calculate_default_transform(
+                src_crs=src_crs,
+                dst_crs=dst_crs,
+                width=width,
+                height=height,
+                resolution=dst_scale,
+                left=src_left,
+                bottom=src_bottom,
+                right=src_right,
+                top=src_top
+            )
+            kwargs = src_rst.meta.copy()
+            kwargs.update({
+                'crs': dst_crs,
+                'transform': warp_transform,
+                'width': warp_width,
+                'height': warp_height
+            })
+            with rio.open(cache_dir / f"reprojected_{output_file_name}","w",**kwargs) as dst_rst:
+                for i in range(1, src_rst.count + 1):
+                    reproject(
+                        source=rio.band(src_rst, i),
+                        destination=rio.band(dst_rst, i),
+                        src_transform=src_rst.transform,
+                        src_crs=src_rst.crs,
+                        dst_transform=warp_transform,
+                        dst_crs=dst_crs,
+                        resampling=Resampling.nearest
+                    )
+
+
+def clean_cache(cache_dir):
+    tif_files = cache_dir.glob('*.tiff')
 
     for file in tif_files:
         try:
@@ -137,53 +177,39 @@ def load_model(exp_dir,device,logger,cfg):
 def load_chip(aef_tile,grid_tile,cache_dir,dst_crs,dst_scale):
     dst_bounds = grid_tile.geometry.bounds
     dst_left, dst_bottom, dst_right, dst_top = dst_bounds
-    aef_fname = aef_tile['assets']['data']['href'].split('/')[-1]
+    aef_fname = f'reprojected_{aef_tile['assets']['data']['href'].split('/')[-1]}'
 
     with rio.open(cache_dir / aef_fname) as src_rst:
         src_transform = src_rst.transform
-        src_crs = src_rst.crs
-        src_bounds = src_rst.bounds
-        src_left,src_bottom,src_right,src_top = src_rst.bounds
-        width, height = src_rst.width, src_rst.height
-            
-        warp_transform, warp_width, warp_height = calculate_default_transform(
-            src_crs=src_crs,
-            dst_crs=dst_crs,
-            width=width,
-            height=height,
-            resolution=dst_scale,
-            left=src_left,
-            bottom=src_bottom,
-            right=src_right,
-            top=src_top
+
+        window = from_bounds(
+            dst_left,
+            dst_bottom,
+            dst_right,
+            dst_top,
+            src_transform
         )
-        with WarpedVRT(src_rst,src_crs=src_rst.crs,transform=warp_transform,crs=dst_crs,height=warp_height,width=warp_width,resampling=Resampling.bilinear) as src_warped_rst:
-            left, bottom, right, top = dst_bounds
 
-            window = from_bounds(
-                left,
-                bottom,
-                right,
-                top,
-                src_warped_rst.transform
-            )
-
-            sample = src_warped_rst.read(window=window)
+        sample = src_rst.read(window=window,boundless=True,fill_value=0)
 
     return sample
 
-def load_batch(aef_tile,grid_tiles,cache_dir,dst_crs,dst_scale,device):
+def load_batch(grid_tiles,aef_tile,cache_dir,dst_crs,dst_scale,device):
+    print(grid_tiles)
     aef_batch = []
-    for grid_tile in grid_tiles:
+    for idx,grid_tile in grid_tiles.iterrows():
+        print(f'Loading item {idx} in batch')
         sample=load_chip(
+            grid_tile=grid_tile,
             aef_tile=aef_tile,
             cache_dir=cache_dir,
             dst_crs=dst_crs,
             dst_scale=dst_scale
         )
+        print(f'Sample {idx} loaded w/ shape: {sample.shape}')
         aef_batch.append(sample)
     aef_batch = np.stack(aef_batch,axis=0)
-    aef_batch=torch.from_numpy(aef_batch.astype(np.float64)).float().to(device)
+    aef_batch = torch.from_numpy(aef_batch.astype(np.float64)).float().to(device)
     
     return aef_batch
 
@@ -200,9 +226,14 @@ def tile_inference(
         write_out_executor
     ):
     idxs = np.arange(len(grid))
-    
+
+    print(f'Number of Grid Cells {len(grid)} | Batch Size {batch_size}')
     num_batches = len(idxs) // batch_size
+    if (len(idxs) % batch_size) != 0:
+        num_batches = num_batches + 1
     batch_idxs = np.array_split(idxs,num_batches)
+
+    print(f'Batch Size: {batch_size} | num_batches {num_batches}')
 
     data_loader_executor = ThreadPoolExecutor(max_workers=4)
 
@@ -211,7 +242,8 @@ def tile_inference(
         aef_tile=aef_tile,
         cache_dir=cache_dir,
         dst_crs=dst_crs,
-        dst_scale=dst_scale
+        dst_scale=dst_scale,
+        device=device
     )
 
     batch_futures = [data_loader_executor.submit(b,grid.iloc[batch]) for batch in batch_idxs]
@@ -221,16 +253,23 @@ def tile_inference(
         batch_geometries = grid.iloc[batch]
         aef_batch = batch_future.result()
 
-        aef_preds = submit_to_gpu_for_prediction(model,aef_batch,device)
+        aef_preds = submit_to_gpu_for_prediction(model,aef_batch)
+        print(f'Predicted batch {i} w/ shape {aef_preds.shape}')
 
-        write_out_futures.append(
-            write_out_executor(
-                write_batch_to_rst,
-                aef_preds,
-                batch_geometries,
-                dst_rst_kwargs
-            )
+        write_batch_to_rst(
+            aef_preds,
+            batch_geometries,
+            dst_rst_kwargs
         )
+
+        # write_out_futures.append(
+        #     write_out_executor.submit(
+        #         write_batch_to_rst,
+        #         aef_preds,
+        #         batch_geometries,
+        #         dst_rst_kwargs
+        #     )
+        # )
     # write_out_results = [write_out_future.result() for write_out_future in write_out_futures]
 
 
@@ -242,8 +281,10 @@ def submit_to_gpu_for_prediction(model,aef_batch):
 def write_batch_to_rst(aef_pred,batch_geometries,dst_rst_kwargs):
 
     with rio.open(**dst_rst_kwargs) as dst_rst:
-        for i, (idx,row) in enumerate(batch_geometries.items()):
-            left,bottom,right,top = row.bounds
+        for i, (idx,row) in enumerate(batch_geometries.iterrows()):
+            left,bottom,right,top = row.geometry.bounds
+
+            print(left,bottom,right,top)
             window = from_bounds(
                 transform=dst_rst.transform,
                 left=left,
@@ -251,7 +292,10 @@ def write_batch_to_rst(aef_pred,batch_geometries,dst_rst_kwargs):
                 right=right,
                 top=top
             )
-            dst_rst.write(aef_pred[i],window=window,indexes=1)
+            try:
+                dst_rst.write(aef_pred[i],window=window,indexes=1)
+            except:
+                print('Unsuccesful write, ignoring sample')
         print('Wrote batch to rst')
 
 
@@ -281,7 +325,13 @@ def aef_ineference_event_loop(
         inference_futures = []
 
         current_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]].iloc[0]
-        future = cache_fill_executor.submit(cache_aef_tile,cache_dir=cache_dir,href=current_href)
+        future = cache_fill_executor.submit(
+            cache_aef_tile,
+            cache_dir=cache_dir,
+            href=current_href,
+            dst_crs=dst_crs,
+            dst_scale=dst_scale
+        )
         current_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]]
 
         for tile_id in group[1:]:
@@ -291,23 +341,42 @@ def aef_ineference_event_loop(
             #submit next inference/tif write
             next_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id].iloc[0]
             next_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id]
-            future = cache_fill_executor.submit(cache_aef_tile,cache_dir=cache_dir,href=next_href)
-            #submit inference computation
-            inference_futures.append(
-                inference_executor.submit(
-                    tile_inference,
-                    model,
-                    batch_size,
-                    device,
-                    current_tile_grid,
-                    current_href,
-                    cache_dir,
-                    dst_crs,
-                    dst_scale,
-                    dst_rst_kwargs,
-                    write_executor
-                )
+            future = cache_fill_executor.submit(
+                cache_aef_tile,
+                cache_dir=cache_dir,
+                href=next_href,
+                dst_crs=dst_crs,
+                dst_scale=dst_scale
             )
+            #submit inference computation
+
+            tile_inference(
+                model,
+                batch_size,
+                device,
+                current_tile_grid,
+                current_href,
+                cache_dir,
+                dst_crs,
+                dst_scale,
+                dst_rst_kwargs,
+                write_executor
+            )
+            # inference_futures.append(
+            #     inference_executor.submit(
+            #         tile_inference,
+            #         model,
+            #         batch_size,
+            #         device,
+            #         current_tile_grid,
+            #         current_href,
+            #         cache_dir,
+            #         dst_crs,
+            #         dst_scale,
+            #         dst_rst_kwargs,
+            #         write_executor
+            #     )
+            # )
             current_href = next_href
             current_tile_grid = next_tile_grid
 
@@ -399,19 +468,21 @@ def run_inference_source_coop(args):
         dst_rst = rio.open(**dst_rst_kwargs)
         dst_rst.close()
         logger.info(f'Initialized output raster @{dst_rst}')
+        dst_rst_kwargs.update({'mode':'r+'})
+
 
         overlapping_aef_tiles = grid.to_crs(aef_index.crs).sjoin(aef_index[['id','assets','geometry','proj:epsg']],predicate='intersects')
         overlapping_aef_tiles = overlapping_aef_tiles.to_crs(grid.crs)
 
         aef_ineference_event_loop(
-            model,
-            batch_size,
-            device,
-            overlapping_aef_tiles,
-            cache_dir,
-            cache_size,
-            crs,
-            scale,
-            dst_rst_kwargs,
-            cleanup
+            model=model,
+            batch_size=batch_size,
+            device=device,
+            overlapping_aef_tiles=overlapping_aef_tiles,
+            cache_dir=cache_dir,
+            cache_size=cache_size,
+            dst_crs=crs,
+            dst_scale=scale,
+            dst_rst_kwargs=dst_rst_kwargs,
+            cleanup=cleanup
         )
