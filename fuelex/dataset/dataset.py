@@ -8,6 +8,7 @@ import rasterio as rio
 import torch
 from torch.utils.data import Dataset
 
+from fuelex.utils import dequantize
 
 class LandfireDataset(Dataset):
     FM40_LABELS = [
@@ -34,7 +35,8 @@ class LandfireDataset(Dataset):
             label_dataset='fbfm40',
             transform=None,
             ignore_index=-1,
-            dropped_labels=[91,92,93,98,99]
+            dropped_labels=[91,92,93,98,99],
+            source='source.coop'
         ):
         super().__init__()
 
@@ -51,6 +53,7 @@ class LandfireDataset(Dataset):
         self.transform = transform
         self.ignore_index = ignore_index
         self.dropped_labels = dropped_labels
+        self.source=source
 
         self.geometry_path = Path(geometry_root) / f'{dataset_name}_{split}_{group_name}_sampling_{img_size}px_{ims_per_group}im.geojson'
         self.geometries = gpd.read_file(self.geometry_path)
@@ -80,6 +83,8 @@ class LandfireDataset(Dataset):
 
         aef_fname = self.data_root / group /f'AEF_{self.year}_Scene{sample['sample_id']}.tif'
         aef_arr = rio.open(aef_fname).read()
+        if self.source == 'source.coop':
+            aef_arr = dequantize(aef_arr)
 
 
         label_fname = self.data_root / group / f'{self.label_dataset.upper()}_{self.year}_Scene{sample['sample_id']}.tif'

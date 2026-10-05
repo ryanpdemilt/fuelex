@@ -39,7 +39,7 @@ def get_gee_chip(geometry,work_dir,year,dst_crs,dst_scale,band_groups,spatial_bl
     aef = ee.ImageCollection('GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL').filter(ee.Filter.calendarRange(year,year,'year')).mosaic()
 
     scene_id = geometry['sample_id']
-    aef_fname = work_dir / f'AEF_{year}_SCENE{scene_id}.tif'
+    aef_fname = work_dir / f'AEF_{year}_Scene{scene_id}.tif'
     left, bottom, right, top = geometry.geometry.bounds
     centroid = geometry.geometry.centroid
     x,y = centroid.x, centroid.y

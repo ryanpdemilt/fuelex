@@ -37,7 +37,7 @@ from hydra.utils import instantiate, call
 import torch
 
 from .train import preprocessor_factory,model_factory
-from fuelex.utils import get_best_model_ckpt_path, get_grid_from_gdf, init_logger
+from fuelex.utils import get_best_model_ckpt_path, get_grid_from_gdf, init_logger,dequantize
 
 
 AEF_BANDS = [f'A{str(i).zfill(2)}' for i in range(64)]
@@ -191,6 +191,7 @@ def load_chip(aef_tile,grid_tile,cache_dir,dst_crs,dst_scale):
         )
 
         sample = src_rst.read(window=window,boundless=True,fill_value=0)
+        sample = dequantize(sample)
 
     return sample
 
