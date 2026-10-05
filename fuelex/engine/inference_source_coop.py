@@ -292,8 +292,19 @@ def write_batch_to_rst(aef_pred,batch_geometries,dst_rst_kwargs):
                 right=right,
                 top=top
             )
+
+            intersecting_window = window.intersection(Window(0,0,dst_rst.width,dst_rst.height))
+            interesetion_width = int(intersecting_window.width)
+            intersection_height = int(intersecting_window.height)
+
+            window_col_off, window_row_off = int(window.col_off), int(window.row_off)
+            if (window_col_off < 0) or (window_row_off < 0):
+                sample = aef_pred[i,window_col_off:,window_row_off:]
+            else:
+                sample = aef_pred[i,:intersection_height,:interesetion_width]
+
             try:
-                dst_rst.write(aef_pred[i],window=window,indexes=1)
+                dst_rst.write(sample,window=intersecting_window,indexes=1)
             except:
                 print('Unsuccesful write, ignoring sample')
         print('Wrote batch to rst')
@@ -387,11 +398,6 @@ def aef_ineference_event_loop(
         # clean cache when writes are done    
         if cleanup:
             clean_cache(cache_dir)
-
-
-
-    
-
 
 def run_inference_source_coop(args):
     exp_dir = Path(args.exp_dir)
