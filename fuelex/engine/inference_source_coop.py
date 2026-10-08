@@ -37,7 +37,7 @@ from hydra.utils import instantiate, call
 import torch
 
 from .train import preprocessor_factory,model_factory
-from fuelex.utils import get_best_model_ckpt_path, get_grid_from_gdf, init_logger
+from fuelex.utils import get_best_model_ckpt_path, get_grid_from_gdf, init_logger,dequantize
 
 
 AEF_BANDS = [f'A{str(i).zfill(2)}' for i in range(64)]
@@ -191,6 +191,7 @@ def load_chip(aef_tile,grid_tile,cache_dir,dst_crs,dst_scale):
         )
 
         sample = src_rst.read(window=window,boundless=True,fill_value=0)
+        sample = dequantize(sample)
 
     return sample
 
@@ -292,8 +293,19 @@ def write_batch_to_rst(aef_pred,batch_geometries,dst_rst_kwargs):
                 right=right,
                 top=top
             )
+
+            intersecting_window = window.intersection(Window(0,0,dst_rst.width,dst_rst.height))
+            interesetion_width = int(intersecting_window.width)
+            intersection_height = int(intersecting_window.height)
+
+            window_col_off, window_row_off = int(window.col_off), int(window.row_off)
+            if (window_col_off < 0) or (window_row_off < 0):
+                sample = aef_pred[i,window_col_off:,window_row_off:]
+            else:
+                sample = aef_pred[i,:intersection_height,:interesetion_width]
+
             try:
-                dst_rst.write(aef_pred[i],window=window,indexes=1)
+                dst_rst.write(sample,window=intersecting_window,indexes=1)
             except:
                 print('Unsuccesful write, ignoring sample')
         print('Wrote batch to rst')
@@ -321,35 +333,77 @@ def aef_ineference_event_loop(
     n_groups = len(aef_tiles_ids) // cache_size
     aef_groups = np.array_split(aef_tiles_ids,n_groups)
     for group in aef_groups:
-        print('Print processing cache region')
+        print(f'Print processing cache w/ group members {group}')
         inference_futures = []
-
-        current_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]].iloc[0]
-        future = cache_fill_executor.submit(
-            cache_aef_tile,
-            cache_dir=cache_dir,
-            href=current_href,
-            dst_crs=dst_crs,
-            dst_scale=dst_scale
-        )
-        current_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]]
-
-        for tile_id in group[1:]:
-            #download_completed
-            future.result()
-
-            #submit next inference/tif write
-            next_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id].iloc[0]
-            next_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id]
+        if len(group) > 1:
+            current_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]].iloc[0]
             future = cache_fill_executor.submit(
                 cache_aef_tile,
                 cache_dir=cache_dir,
-                href=next_href,
+                href=current_href,
                 dst_crs=dst_crs,
                 dst_scale=dst_scale
             )
-            #submit inference computation
+            current_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]]
 
+            for tile_id in group[1:]:
+                #download_completed
+                future.result()
+
+                #submit next inference/tif write
+                next_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id].iloc[0]
+                next_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id]
+                future = cache_fill_executor.submit(
+                    cache_aef_tile,
+                    cache_dir=cache_dir,
+                    href=next_href,
+                    dst_crs=dst_crs,
+                    dst_scale=dst_scale
+                )
+                #submit inference computation
+
+                tile_inference(
+                    model,
+                    batch_size,
+                    device,
+                    current_tile_grid,
+                    current_href,
+                    cache_dir,
+                    dst_crs,
+                    dst_scale,
+                    dst_rst_kwargs,
+                    write_executor
+                )
+                # inference_futures.append(
+                #     inference_executor.submit(
+                #         tile_inference,
+                #         model,
+                #         batch_size,
+                #         device,
+                #         current_tile_grid,
+                #         current_href,
+                #         cache_dir,
+                #         dst_crs,
+                #         dst_scale,
+                #         dst_rst_kwargs,
+                #         write_executor
+                #     )
+                # )
+                current_href = next_href
+                current_tile_grid = next_tile_grid
+
+            #wait for tile inference and writes to finish
+            inference_results = [inference_future.result() for inference_future in inference_futures]
+            # write_results = [write_future.result() for write_future in write_out_futures]
+        else:
+            current_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]]
+            current_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]].iloc[0]
+            cache_aef_tile(
+                cache_dir=cache_dir,
+                href=current_href,
+                dst_crs=dst_crs,
+                dst_scale=dst_scale
+            )
             tile_inference(
                 model,
                 batch_size,
@@ -362,36 +416,9 @@ def aef_ineference_event_loop(
                 dst_rst_kwargs,
                 write_executor
             )
-            # inference_futures.append(
-            #     inference_executor.submit(
-            #         tile_inference,
-            #         model,
-            #         batch_size,
-            #         device,
-            #         current_tile_grid,
-            #         current_href,
-            #         cache_dir,
-            #         dst_crs,
-            #         dst_scale,
-            #         dst_rst_kwargs,
-            #         write_executor
-            #     )
-            # )
-            current_href = next_href
-            current_tile_grid = next_tile_grid
-
-        #wait for tile inference and writes to finish
-        inference_results = [inference_future.result() for inference_future in inference_futures]
-        # write_results = [write_future.result() for write_future in write_out_futures]
-
         # clean cache when writes are done    
         if cleanup:
             clean_cache(cache_dir)
-
-
-
-    
-
 
 def run_inference_source_coop(args):
     exp_dir = Path(args.exp_dir)
