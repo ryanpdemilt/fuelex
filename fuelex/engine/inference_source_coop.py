@@ -332,36 +332,33 @@ def aef_ineference_event_loop(
 
     n_groups = len(aef_tiles_ids) // cache_size
     aef_groups = np.array_split(aef_tiles_ids,n_groups)
+
+    #get rid of stray files
+    clean_cache(cache_dir)
+
     for group in aef_groups:
         print(f'Print processing cache w/ group members {group}')
         inference_futures = []
         if len(group) > 1:
-            current_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]].iloc[0]
-            future = cache_fill_executor.submit(
-                cache_aef_tile,
-                cache_dir=cache_dir,
-                href=current_href,
-                dst_crs=dst_crs,
-                dst_scale=dst_scale
-            )
-            current_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == group[0]]
-
-            for tile_id in group[1:]:
-                #download_completed
-                future.result()
-
-                #submit next inference/tif write
-                next_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id].iloc[0]
-                next_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id]
+            cache_futures =[]
+            for tile_id in group:
+                current_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id].iloc[0]
                 future = cache_fill_executor.submit(
                     cache_aef_tile,
                     cache_dir=cache_dir,
-                    href=next_href,
+                    href=current_href,
                     dst_crs=dst_crs,
                     dst_scale=dst_scale
                 )
-                #submit inference computation
+                cache_futures.append(future)
 
+            for future, tile_id in zip(cache_futures,group):
+                #wait for download to complete
+                future.result()
+
+                #submit inference computation
+                current_href = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id].iloc[0]
+                current_tile_grid = overlapping_aef_tiles[overlapping_aef_tiles['id'] == tile_id]
                 tile_inference(
                     model,
                     batch_size,
@@ -389,8 +386,6 @@ def aef_ineference_event_loop(
                 #         write_executor
                 #     )
                 # )
-                current_href = next_href
-                current_tile_grid = next_tile_grid
 
             #wait for tile inference and writes to finish
             inference_results = [inference_future.result() for inference_future in inference_futures]
